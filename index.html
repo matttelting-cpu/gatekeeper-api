@@ -260,7 +260,8 @@
         formData.append("target_height_inches", height);
 
         try {
-            const response = await fetch("http://127.0.0.1:8000/v1/preflight/analyze", { method: "POST", body: formData });
+            // UPDATED: Now points to your live Render server!
+            const response = await fetch("https://gatekeeper-api-ksr1.onrender.com/v1/preflight/analyze", { method: "POST", body: formData });
             const data = await response.json();
             const report = data.report_card;
 
@@ -268,7 +269,6 @@
                 resultBox.className = 'pass';
                 let passHtml = `<strong style="font-size: 1.1em;">✅ Print Ready!</strong><br><div style="margin-top: 8px; margin-bottom: 12px;">Effective DPI: <strong>${report.effective_dpi}</strong></div>`;
                 
-                // If there are informative notes but it still passed, display them here
                 if (report.warnings.length > 0) {
                     passHtml += `<small style="line-height: 1.5; display: block; color: #1E3B37;">${report.warnings.join('<br><br>')}</small>`;
                 }
@@ -310,7 +310,8 @@
                 endpoint = "/v1/preflight/waiver";
             }
 
-            const response = await fetch(`http://127.0.0.1:8000${endpoint}`, { method: "POST", body: formData });
+            // UPDATED: Now points to your live Render server!
+            const response = await fetch(`https://gatekeeper-api-ksr1.onrender.com${endpoint}`, { method: "POST", body: formData });
             const data = await response.json();
             
             if (data.status === "success") {
