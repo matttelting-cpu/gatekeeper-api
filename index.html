@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DesignerScripts Quality Check</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+    
+    <!-- PDF.js Library for frontend ripping -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+    </script>
+
+    <style>
+        /* DesignerScripts Custom Palette */
+        :root {
+            --primary: #2C524D;
+            --primary-hover: #1E3B37;
+            --success: #357A60;
+            --success-hover: #265E49;
+            --warning: #CD8B33;
+            --warning-hover: #A86D23;
+            --danger: #C04B4B;
+            --danger-hover: #9E3838;
+            --surface: #ffffff;
+            --background: #F7F8F6;
+            --text-main: #1D2B28;
+            --text-muted: #647470;
+            --border: #DDE2DF;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--background);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            padding: 40px 20px;
+            margin: 0;
+            line-height: 1.5;
+        }
+
+        .widget-container {
+            width: 100%;
+            max-width: 650px;
+            background-color: var(--surface);
+            background-image: url('bg-graphic.jpg');
+            background-size: cover;
+            background-position: center right;
+            background-repeat: no-repeat;
+            background-blend-mode: soft-light;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(44, 82, 77, 0.08), 0 4px 6px rgba(0, 0, 0, 0.02);
+            border-top: 6px solid var(--primary);
+            overflow: hidden; 
+            position: relative;
+        }
+
+        .widget-container::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(to right, rgba(255,255,255,0.95) 40%, rgba(255,255,255,0.4) 100%);
+            z-index: 0;
+            pointer-events: none;
+        }
+        
+        .header-text, .input-group, .file-upload-wrapper, button, #result-box, .upsell-container {
+            position: relative;
+            z-index: 1;
+        }
+
+        .header-text { text-align: center; margin-bottom: 30px; }
+        .header-text h2 { font-family: 'Playfair Display', serif; margin: 0 0 8px 0; font-size: 1.8rem; color: var(--primary); }
+        .header-text p { margin: 0; color: var(--text-muted); font-size: 0.95rem; }
+
+        label { display: block; font-size: 0.875rem; font-weight: 600; margin-bottom: 6px; color: var(--text-main); }
+
+        .input-group { display: flex; gap: 15px; margin-bottom: 20px; }
+        .input-wrapper { flex: 1; }
+
+        input[type="number"] { width: 100%; padding: 12px 16px; border: 1px solid var(--border); border-radius: 6px; font-size: 1rem; font-family: inherit; box-sizing: border-box; transition: 0.2s; }
+        input[type="number"]:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(44, 82, 77, 0.15); }
+
+        .file-upload-wrapper { margin-bottom: 25px; }
+        
+        input[type="file"] { width: 100%; padding: 15px; background: #F9FAFB; border: 2px dashed var(--border); border-radius: 6px; cursor: pointer; color: var(--text-muted); transition: 0.2s; }
+        input[type="file"]:hover { border-color: var(--primary); background: #F4F7F6; }
+
+        button { width: 100%; padding: 14px 20px; border: none; border-radius: 6px; font-size: 1rem; font-weight: 600; font-family: inherit; cursor: pointer; transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn-primary { background-color: var(--primary); color: white; }
+        .btn-primary:hover { background-color: var(--primary-hover); transform: translateY(-1px); }
+        .btn-success { background-color: var(--success); color: white; margin-top: 15px; }
+        .btn-success:hover { background-color: var(--success-hover); }
+        .btn-warning { background-color: var(--warning); color: white; margin-top: 15px; }
+        .btn-warning:hover { background-color: var(--warning-hover); }
+        .btn-danger { background-color: var(--danger); color: white; opacity: 0.4; cursor: not-allowed; margin-top: 15px; }
+        .btn-danger.active { opacity: 1; cursor: pointer; }
+        .btn-danger.active:hover { background-color: var(--danger-hover); }
+
+        #result-box { margin-top: 25px; padding: 20px; border-radius: 6px; display: none; animation: fadeIn 0.4s ease-out; }
+        .pass { background-color: #F0F6F4; color: #214F3D; border: 1px solid #CDE2DA; }
+        .fail { background-color: #FDF4F4; color: #8A2C2C; border: 1px solid #F3DADA; }
+        .loading { background-color: #F4F7F6; color: var(--primary); border: 1px solid #DDE2DF; text-align: center; }
+
+        .upsell-container { display: none; margin-top: 35px; border-top: 1px solid var(--border); padding-top: 30px; animation: fadeIn 0.5s ease-out; }
+        .upsell-container h3 { text-align: center; font-family: 'Playfair Display', serif; font-size: 1.4rem; margin: 0 0 20px 0; color: var(--text-main); }
+        .cards-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
+        .option-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; transition: 0.2s; }
+        .option-card:hover { border-color: var(--primary); }
+        .card-header { font-weight: 700; font-size: 1.05rem; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .price-tag { background: var(--background); padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; color: var(--primary); font-weight: 600; }
+        .card-desc { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 15px; line-height: 1.4; }
+        .option-card.full-width { grid-column: 1 / -1; background: var(--background); }
+        
+        .waiver-area { display: flex; align-items: flex-start; gap: 10px; margin-top: 10px; margin-bottom: 5px; }
+        .waiver-area input[type="checkbox"] { margin-top: 3px; width: 18px; height: 18px; accent-color: var(--danger); cursor: pointer; }
+        .waiver-area label { font-size: 0.85rem; color: var(--text-muted); font-weight: 400; line-height: 1.4; cursor: pointer; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<div class="widget-container">
+    <div class="header-text">
+        <h2>Image Quality Check</h2>
+        <p>Ensure your file is high enough resolution for your target size.</p>
+    </div>
+    
+    <div class="input-group">
+        <div class="input-wrapper">
+            <label for="targetWidth">Target Width (Inches)</label>
+            <input type="number" id="targetWidth" placeholder="e.g. 48" required>
+        </div>
+        <div class="input-wrapper">
+            <label for="targetHeight">Target Height (Inches)</label>
+            <input type="number" id="targetHeight" placeholder="e.g. 24" required>
+        </div>
+    </div>
+    
+    <div class="file-upload-wrapper">
+        <label for="imageFile">Select Artwork File (Images or PDF)</label>
+        <input type="file" id="imageFile" accept="image/*, application/pdf" required>
+    </div>
+    
+    <button class="btn-primary" onclick="analyzeArtwork()" id="analyzeBtn">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+        Analyze Quality
+    </button>
+
+    <div id="result-box"></div>
+
+    <div class="upsell-container" id="upsell-container">
+        <h3>Action Required: Choose a Solution</h3>
+        <div class="cards-grid">
+            <div class="option-card">
+                <div>
+                    <div class="card-header"><span>Auto-Fix</span><span class="price-tag">+$15</span></div>
+                    <div class="card-desc">Our system will automatically upscale and sharpen this image to a production-ready 300 DPI.</div>
+                </div>
+                <button class="btn-success" onclick="executeAction('optimize')">✨ Fix Automatically</button>
+            </div>
+            <div class="option-card">
+                <div>
+                    <div class="card-header"><span>Pro Redraw</span><span class="price-tag">+$75</span></div>
+                    <div class="card-desc">Send this to our in-house design team to manually redraw it into a perfect scalable vector.</div>
+                </div>
+                <button class="btn-warning" onclick="executeAction('queue')">📐 Send to Design Team</button>
+            </div>
+            <div class="option-card full-width">
+                <div class="card-header">Print As-Is (No Warranty)</div>
+                <div class="waiver-area">
+                    <input type="checkbox" id="waiverCheck" onclick="toggleWaiver()"> 
+                    <label for="waiverCheck">I acknowledge my file is low resolution and may print blurry or pixelated. I explicitly waive my right to refunds or reprints based on image quality.</label>
+                </div>
+                <button class="btn-danger" id="btn-asis" onclick="executeAction('waiver')" disabled>Accept Risk & Proceed</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentFile = null;
+
+    function toggleWaiver() {
+        const checkbox = document.getElementById('waiverCheck');
+        const btn = document.getElementById('btn-asis');
+        if (checkbox.checked) { btn.classList.add('active'); btn.disabled = false; } 
+        else { btn.classList.remove('active'); btn.disabled = true; }
+    }
+
+    async function convertPdfToImage(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const typedarray = new Uint8Array(e.target.result);
+                    const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                    
+                    const page = await pdf.getPage(1);
+                    const scale = 4.166; 
+                    const viewport = page.getViewport({ scale: scale });
+
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+
+                    await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+
+                    canvas.toBlob((blob) => {
+                        const newFileName = file.name.replace('.pdf', '.png');
+                        const newFile = new File([blob], newFileName, { type: 'image/png' });
+                        resolve(newFile);
+                    }, 'image/png');
+                } catch (error) {
+                    reject(error);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    async function analyzeArtwork() {
+        let fileInput = document.getElementById('imageFile').files[0];
+        const width = document.getElementById('targetWidth').value;
+        const height = document.getElementById('targetHeight').value;
+        const resultBox = document.getElementById('result-box');
+        const upsellBox = document.getElementById('upsell-container');
+
+        if (!fileInput || !width || !height) {
+            alert("Please fill out all fields before analyzing."); return;
+        }
+
+        upsellBox.style.display = 'none'; 
+        resultBox.style.display = 'block';
+        resultBox.className = 'loading';
+        
+        if (fileInput.type === 'application/pdf') {
+            resultBox.innerHTML = '<strong>📄 PDF Detected...</strong><br><small>Extracting visual data to image format.</small>';
+            try {
+                fileInput = await convertPdfToImage(fileInput);
+            } catch (err) {
+                resultBox.className = 'fail';
+                resultBox.innerHTML = "<strong>Error:</strong> Could not parse the PDF file.";
+                return;
+            }
+        }
+
+        currentFile = fileInput; 
+        resultBox.innerHTML = '<strong>⚙️ Analyzing image matrix...</strong><br><small>Checking resolution and color space.</small>';
+
+        const formData = new FormData();
+        formData.append("file", currentFile);
+        formData.append("target_width_inches", width);
+        formData.append("target_height_inches", height);
+
+        try {
+            const response = await fetch("http://127.0.0.1:8000/v1/preflight/analyze", { method: "POST", body: formData });
+            const data = await response.json();
+            const report = data.report_card;
+
+            if (report.is_print_ready) {
+                resultBox.className = 'pass';
+                let passHtml = `<strong style="font-size: 1.1em;">✅ Print Ready!</strong><br><div style="margin-top: 8px; margin-bottom: 12px;">Effective DPI: <strong>${report.effective_dpi}</strong></div>`;
+                
+                // If there are informative notes but it still passed, display them here
+                if (report.warnings.length > 0) {
+                    passHtml += `<small style="line-height: 1.5; display: block; color: #1E3B37;">${report.warnings.join('<br><br>')}</small>`;
+                }
+                resultBox.innerHTML = passHtml;
+            } else {
+                resultBox.className = 'fail';
+                resultBox.innerHTML = `<strong style="font-size: 1.1em;">⚠️ Low Quality Warning</strong><br><div style="margin-top: 8px; margin-bottom: 12px;">Detected Effective DPI: <strong>${report.effective_dpi}</strong></div><small style="line-height: 1.4; display: block;">${report.warnings.join('<br><br>')}</small>`;
+                upsellBox.style.display = 'block'; 
+            }
+        } catch (error) {
+            resultBox.className = 'fail';
+            resultBox.innerHTML = "<strong>Error:</strong> Could not connect to the analysis server. Make sure the backend is running.";
+        }
+    }
+
+    async function executeAction(actionType) {
+        const resultBox = document.getElementById('result-box');
+        const upsellBox = document.getElementById('upsell-container');
+        
+        upsellBox.style.display = 'none';
+        resultBox.className = 'loading';
+        
+        const formData = new FormData();
+        formData.append("file", currentFile);
+
+        try {
+            let endpoint = "";
+            
+            if (actionType === 'optimize') {
+                resultBox.innerHTML = '<strong>✨ Running Automated AI Optimization...</strong><br><small>Upscaling and sharpening your image to 300 DPI.</small>';
+                formData.append("target_width_inches", document.getElementById('targetWidth').value);
+                formData.append("target_height_inches", document.getElementById('targetHeight').value);
+                endpoint = "/v1/preflight/optimize";
+            } else if (actionType === 'queue') {
+                resultBox.innerHTML = '<strong>📨 Routing to Design Queue...</strong><br><small>Flagging file for manual vector redraw.</small>';
+                endpoint = "/v1/preflight/manual-queue";
+            } else if (actionType === 'waiver') {
+                resultBox.innerHTML = '<strong>📝 Logging Digital Waiver...</strong><br><small>Attaching signature to your order ticket.</small>';
+                endpoint = "/v1/preflight/waiver";
+            }
+
+            const response = await fetch(`http://127.0.0.1:8000${endpoint}`, { method: "POST", body: formData });
+            const data = await response.json();
+            
+            if (data.status === "success") {
+                resultBox.className = 'pass';
+                resultBox.innerHTML = `<strong style="font-size: 1.1em;">✅ Success!</strong><br><br><div style="line-height: 1.5;">${data.message}</div>`;
+            } else {
+                resultBox.className = 'fail';
+                resultBox.innerHTML = `<strong>Error:</strong> ${data.message}`;
+            }
+
+        } catch (error) {
+            resultBox.className = 'fail';
+            resultBox.innerHTML = "<strong>Error:</strong> Could not communicate with the server.";
+        }
+    }
+</script>
+
+</body>
+</html>
