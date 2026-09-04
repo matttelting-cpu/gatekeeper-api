@@ -3,8 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 import io
 
+# Turn off the security limit for massive large-format graphics
+Image.MAX_IMAGE_PIXELS = None 
+
 app = FastAPI(title="DesignerScripts Pre-Flight API")
 
+# Allow the frontend widget to talk to this server
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,69 +18,63 @@ app.add_middleware(
 )
 
 @app.post("/v1/preflight/analyze")
-async def analyze_image(
+async def analyze_artwork(
     file: UploadFile = File(...),
     target_width_inches: float = Form(...),
     target_height_inches: float = Form(...)
 ):
-    contents = await file.read()
-    image = Image.open(io.BytesIO(contents))
+    # Read the image file into memory
+    image_data = await file.read()
+    img = Image.open(io.BytesIO(image_data))
     
-    pixel_width, pixel_height = image.size
+    # Calculate Effective PPI based on pixel width divided by physical width
+    effective_ppi = img.width / target_width_inches
     
-    dpi_x = pixel_width / target_width_inches
-    dpi_y = pixel_height / target_height_inches
-    effective_dpi = min(dpi_x, dpi_y)
-    
-    max_dimension = max(target_width_inches, target_height_inches)
-    
-    if max_dimension <= 24:
-        min_required_dpi = 150
-        category = "Small Format (Close Viewing)"
-    elif max_dimension <= 72:
-        min_required_dpi = 100
-        category = "Medium Format (Short Distance)"
+    # Dynamic logic: determine minimum required PPI based on the longest dimension
+    max_dim = max(target_width_inches, target_height_inches)
+    if max_dim <= 24:
+        min_required_ppi = 150
+    elif max_dim <= 72:
+        min_required_ppi = 100
     else:
-        min_required_dpi = 72
-        category = "Large Format (Distance Viewing)"
-
-    # Define a tighter 5% leeway for borderline files
-    tolerance_dpi = min_required_dpi * 0.95
-
-    warnings = []
-    is_print_ready = True
-    
-    if effective_dpi >= min_required_dpi:
-        pass # Perfect score, no resolution warning needed
-    elif effective_dpi >= tolerance_dpi:
-        # It's close enough to pass, so we don't trigger a failure, just a note
-        warnings.append(f"ℹ️ <strong>Informative Note:</strong> Your file is at {int(effective_dpi)} DPI. This is slightly below our strict {min_required_dpi} DPI standard for {category}, but it is close enough that it will print cleanly. No action required.")
-    else:
-        # It missed the tolerance window completely, trigger the upsell
-        is_print_ready = False
-        warnings.append(f"Resolution too low ({int(effective_dpi)} DPI). Minimum {min_required_dpi} DPI required for {category}.")
+        min_required_ppi = 72
         
-    if image.mode != 'CMYK':
-        warnings.append(f"ℹ️ <strong>Color Note:</strong> Image is in {image.mode} format. Bright or neon colors may look duller when printed in CMYK.")
+    # Apply the 5% tolerance margin
+    tolerance_ppi = min_required_ppi * 0.95
+    
+    is_print_ready = True
+    warnings = []
+    
+    # Check the resolution against the thresholds
+    if effective_ppi >= min_required_ppi:
+        pass 
+    elif effective_ppi >= tolerance_ppi:
+        warnings.append(f"Informative Note: Your file is at {int(effective_ppi)} PPI. This is slightly below our strict {min_required_ppi} PPI standard, but within acceptable printing margins.")
+    else:
+        is_print_ready = False
+        warnings.append(f"Resolution too low ({int(effective_ppi)} PPI). Minimum {min_required_ppi} PPI required for this print size.")
+        
+    # Check color space
+    if img.mode not in ['CMYK', 'L']:
+        warnings.append("Color Space Warning: File is not CMYK. Bright or neon colors may print duller than they appear on screen.")
         
     return {
         "report_card": {
             "is_print_ready": is_print_ready,
-            "effective_dpi": int(effective_dpi),
-            "required_dpi": min_required_dpi,
-            "print_category": category,
+            "effective_ppi": int(effective_ppi),
             "warnings": warnings
         }
     }
-    
+
+# Mock endpoints for the upsell actions
 @app.post("/v1/preflight/optimize")
-async def optimize(file: UploadFile = File(...), target_width_inches: float = Form(...), target_height_inches: float = Form(...)):
-    return {"status": "success", "message": "Image successfully upscaled and optimized for production."}
+async def optimize(file: UploadFile = File(...)):
+    return {"status": "success", "message": "Image successfully upscaled and optimized for print."}
 
 @app.post("/v1/preflight/manual-queue")
 async def queue(file: UploadFile = File(...)):
-    return {"status": "success", "message": "File successfully routed to the internal design team queue."}
+    return {"status": "success", "message": "Artwork routed to the prepress design team."}
 
 @app.post("/v1/preflight/waiver")
 async def waiver(file: UploadFile = File(...)):
-    return {"status": "success", "message": "Digital waiver verified and logged. Proceeding to production as-is."}
+    return {"status": "success", "message": "Digital waiver recorded. Proceeding with print as-is."}

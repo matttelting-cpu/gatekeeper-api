@@ -14,7 +14,6 @@
     </script>
 
     <style>
-        /* DesignerScripts Custom Palette */
         :root {
             --primary: #2C524D;
             --primary-hover: #1E3B37;
@@ -160,7 +159,7 @@
             <div class="option-card">
                 <div>
                     <div class="card-header"><span>Auto-Fix</span><span class="price-tag">+$15</span></div>
-                    <div class="card-desc">Our system will automatically upscale and sharpen this image to a production-ready 300 DPI.</div>
+                    <div class="card-desc">Our system will automatically upscale and sharpen this image to a production-ready 300 PPI.</div>
                 </div>
                 <button class="btn-success" onclick="executeAction('optimize')">✨ Fix Automatically</button>
             </div>
@@ -225,6 +224,60 @@
         });
     }
 
+    function generatePreviewHtml(w, h) {
+        return `
+        <div style="margin-top: 25px; padding-top: 20px; border-top: 1px solid rgba(0,0,0,0.08); text-align: center;">
+            <strong style="display: block; font-size: 0.95em; margin-bottom: 10px;">Actual Size Preview (3" x 3" Crop)</strong>
+            <div style="background: repeating-conic-gradient(#f4f4f4 0% 25%, #ffffff 0% 50%) 50% / 16px 16px; display: inline-block; border: 1px solid #CDE2DA; border-radius: 4px; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);">
+                <canvas id="previewCanvas" width="288" height="288" style="display: block; width: 288px; height: 288px; max-width: 100%;"></canvas>
+            </div>
+            <small style="display: block; margin-top: 10px; color: var(--text-muted); line-height: 1.4;">
+                This simulates how sharp or pixelated the center of your artwork will look when printed physically at ${w}" x ${h}".
+            </small>
+        </div>`;
+    }
+
+    function renderPreviewCanvas(file, effectivePpi) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                const canvas = document.getElementById('previewCanvas');
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                
+                const previewSizePx = 288; 
+                const cropSize = Math.max(1, Math.floor(3 * effectivePpi)); 
+                
+                const sourceX = (img.width - cropSize) / 2;
+                const sourceY = (img.height - cropSize) / 2;
+                
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                const sX = Math.max(0, sourceX);
+                const sY = Math.max(0, sourceY);
+                const sWidth = Math.min(img.width, cropSize);
+                const sHeight = Math.min(img.height, cropSize);
+                
+                const scale = previewSizePx / cropSize;
+                const dWidth = sWidth * scale;
+                const dHeight = sHeight * scale;
+                const dX = (previewSizePx - dWidth) / 2;
+                const dY = (previewSizePx - dHeight) / 2;
+
+                if (effectivePpi < 72) {
+                    ctx.imageSmoothingEnabled = false;
+                } else {
+                    ctx.imageSmoothingEnabled = true;
+                }
+                
+                ctx.drawImage(img, sX, sY, sWidth, sHeight, dX, dY, dWidth, dHeight);
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
     async function analyzeArtwork() {
         let fileInput = document.getElementById('imageFile').files[0];
         const width = document.getElementById('targetWidth').value;
@@ -260,24 +313,33 @@
         formData.append("target_height_inches", height);
 
         try {
-            // UPDATED: Now points to your live Render server!
             const response = await fetch("https://gatekeeper-api-ksr1.onrender.com/v1/preflight/analyze", { method: "POST", body: formData });
             const data = await response.json();
             const report = data.report_card;
 
             if (report.is_print_ready) {
                 resultBox.className = 'pass';
-                let passHtml = `<strong style="font-size: 1.1em;">✅ Print Ready!</strong><br><div style="margin-top: 8px; margin-bottom: 12px;">Effective DPI: <strong>${report.effective_dpi}</strong></div>`;
+                let passHtml = `<strong style="font-size: 1.1em;">✅ Print Ready!</strong><br><div style="margin-top: 8px;">Effective PPI: <strong>${report.effective_ppi}</strong></div>`;
                 
                 if (report.warnings.length > 0) {
-                    passHtml += `<small style="line-height: 1.5; display: block; color: #1E3B37;">${report.warnings.join('<br><br>')}</small>`;
+                    passHtml += `<small style="line-height: 1.5; display: block; color: #1E3B37; margin-top: 12px;">${report.warnings.join('<br><br>')}</small>`;
                 }
+                
+                passHtml += generatePreviewHtml(width, height);
                 resultBox.innerHTML = passHtml;
+                
             } else {
                 resultBox.className = 'fail';
-                resultBox.innerHTML = `<strong style="font-size: 1.1em;">⚠️ Low Quality Warning</strong><br><div style="margin-top: 8px; margin-bottom: 12px;">Detected Effective DPI: <strong>${report.effective_dpi}</strong></div><small style="line-height: 1.4; display: block;">${report.warnings.join('<br><br>')}</small>`;
+                let failHtml = `<strong style="font-size: 1.1em;">⚠️ Low Quality Warning</strong><br><div style="margin-top: 8px; margin-bottom: 12px;">Detected Effective PPI: <strong>${report.effective_ppi}</strong></div><small style="line-height: 1.4; display: block;">${report.warnings.join('<br><br>')}</small>`;
+                
+                failHtml += generatePreviewHtml(width, height);
+                resultBox.innerHTML = failHtml;
+                
                 upsellBox.style.display = 'block'; 
             }
+            
+            renderPreviewCanvas(currentFile, report.effective_ppi);
+
         } catch (error) {
             resultBox.className = 'fail';
             resultBox.innerHTML = "<strong>Error:</strong> Could not connect to the analysis server. Make sure the backend is running.";
@@ -298,7 +360,7 @@
             let endpoint = "";
             
             if (actionType === 'optimize') {
-                resultBox.innerHTML = '<strong>✨ Running Automated AI Optimization...</strong><br><small>Upscaling and sharpening your image to 300 DPI.</small>';
+                resultBox.innerHTML = '<strong>✨ Running Automated AI Optimization...</strong><br><small>Upscaling and sharpening your image to 300 PPI.</small>';
                 formData.append("target_width_inches", document.getElementById('targetWidth').value);
                 formData.append("target_height_inches", document.getElementById('targetHeight').value);
                 endpoint = "/v1/preflight/optimize";
@@ -310,7 +372,6 @@
                 endpoint = "/v1/preflight/waiver";
             }
 
-            // UPDATED: Now points to your live Render server!
             const response = await fetch(`https://gatekeeper-api-ksr1.onrender.com${endpoint}`, { method: "POST", body: formData });
             const data = await response.json();
             
